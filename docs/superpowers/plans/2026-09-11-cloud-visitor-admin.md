@@ -13,7 +13,7 @@
 - [x] Pass 79 unit/endpoint tests, 9 original interview browser scenarios and 2 real Wrangler admin browser scenarios.
 - [x] Independently review security and inspect desktop/mobile admin screenshots.
 - [x] Publish and verify GitHub Pages at https://rongjinguo.github.io/finance-interview-lab/.
-- [ ] Complete user Cloudflare authorization, provision D1 and deploy Worker with secrets.
+- [x] Complete user Cloudflare authorization, provision D1 and deploy Worker with secrets.
 - [ ] Configure real backend endpoint in published frontend and verify a live visit appears in the protected dashboard.
 
 The previous Node server-only visitor plan is superseded. Public interface has no visit notice, per the user's explicit instruction. Cloudflare authorization is required for the last two deployment steps.

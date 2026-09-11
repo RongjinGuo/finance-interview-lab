@@ -1,6 +1,7 @@
 {
   "$schema": "../node_modules/wrangler/config-schema.json",
   "name": "finance-interview-visits",
+  "account_id": "9f5cff11f3cc43e973a9b884a5d9939e",
   "main": "index.mjs",
   "compatibility_date": "2026-09-11",
   "workers_dev": true,
@@ -18,6 +19,7 @@
     {
       "binding": "DB",
       "database_name": "finance-interview-visits-db",
+      "database_id": "d398c6b8-072b-4d02-99a9-df0f35750ad1",
       "migrations_dir": "./migrations"
     }
   ],

@@ -1,7 +1,7 @@
 {
   "websiteUrl": "https://rongjinguo.github.io/finance-interview-lab/",
   "repositoryUrl": "https://github.com/RongjinGuo/finance-interview-lab",
-  "adminUrl": null,
-  "visitEndpoint": "",
-  "backendStatus": "awaiting-cloudflare-authentication"
+  "adminUrl": "https://finance-interview-visits.finance-interview-lab.workers.dev/",
+  "visitEndpoint": "https://finance-interview-visits.finance-interview-lab.workers.dev/api/visit",
+  "backendStatus": "deployed"
 }
