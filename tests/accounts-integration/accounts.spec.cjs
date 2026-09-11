@@ -2,12 +2,12 @@ const { test, expect } = require('@playwright/test');
 const { randomUUID } = require('node:crypto');
 
 const origin = 'http://127.0.0.1:43189';
-const password = 'browser-test-password-123';
+const inviteCodes = { admin: '8301', alice: '0462', bob: '9753', charlie: '2648' };
 
 async function login(page, username) {
   await page.goto('/');
-  await page.locator('#account-username').fill(username);
-  await page.locator('#account-password').fill(password);
+  await page.locator('#account-invite-code').fill(inviteCodes[username]);
+  await expect(page.locator('#account-username, #account-password')).toHaveCount(0);
   await page.locator('#account-login-submit').click();
   await expect(page.locator('[data-action="start"]')).toBeVisible();
 }
@@ -40,8 +40,7 @@ test('answer saves to Git and resumes in a second browser while other accounts s
   await page.locator('#account-logout').click();
   await expect(page.locator('#account-login-form')).toBeVisible();
   expect((await page.request.get('/api/state')).status()).toBe(401);
-  await page.locator('#account-username').fill('bob');
-  await page.locator('#account-password').fill(password);
+  await page.locator('#account-invite-code').fill(inviteCodes.bob);
   await page.locator('#account-login-submit').click();
   await expect(page.locator('[data-action="start"]')).toBeVisible();
   expect((await envelope(page)).state).toBeNull();
@@ -94,7 +93,7 @@ test('administrator can inspect records and create an ordinary account on mobile
   await page.getByText('创建练习账号', { exact: true }).click();
   await page.locator('#new-username').fill('charlie');
   await page.locator('#new-display-name').fill('新的练习账号');
-  await page.locator('#new-password').fill(password);
+  await page.locator('#new-invite-code').fill(inviteCodes.charlie);
   await page.locator('#account-create-user button[type="submit"]').click();
   await expect(page.locator('#account-user-list')).toContainText('charlie');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

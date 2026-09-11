@@ -1,12 +1,11 @@
 const { test, expect } = require('@playwright/test');
 
 const origin = 'http://127.0.0.1:43189';
-const password = 'browser-test-password-123';
+const inviteCodes = { alice_tabs: '6412', bob_tabs: '7413', offline_tabs: '08414', duplicate_tabs: '9415' };
 
 async function login(page, username) {
   await page.goto('/');
-  await page.locator('#account-username').fill(username);
-  await page.locator('#account-password').fill(password);
+  await page.locator('#account-invite-code').fill(inviteCodes[username]);
   await page.locator('#account-login-submit').click();
   await expect(page.locator('[data-action="start"]')).toBeVisible();
 }
@@ -33,14 +32,14 @@ async function writeOfflineAnswer(page, text) {
 }
 
 test.beforeAll(async ({ request }) => {
-  const loggedIn = await request.post('/api/login', { headers: { Origin: origin }, data: { username: 'admin', password } });
+  const loggedIn = await request.post('/api/login', { headers: { Origin: origin }, data: { inviteCode: '8301' } });
   expect(loggedIn.status()).toBe(200);
   const listed = await request.get('/api/admin/users');
   expect(listed.status()).toBe(200);
   const existing = new Set((await listed.json()).users.map(user => user.username));
-  for (const username of ['alice_tabs', 'bob_tabs', 'offline_tabs', 'duplicate_tabs']) {
+  for (const [username, inviteCode] of Object.entries(inviteCodes)) {
     if (existing.has(username)) continue;
-    const created = await request.post('/api/admin/users', { headers: { Origin: origin }, data: { username, displayName: username, password } });
+    const created = await request.post('/api/admin/users', { headers: { Origin: origin }, data: { username, displayName: username, inviteCode } });
     expect(created.status()).toBe(201);
   }
 });
@@ -56,8 +55,7 @@ test('switching accounts in another tab cannot upload the previous account draft
 
   await switchingTab.locator('#account-logout').click();
   await expect(switchingTab.locator('#account-login-form')).toBeVisible();
-  await switchingTab.locator('#account-username').fill('bob_tabs');
-  await switchingTab.locator('#account-password').fill(password);
+  await switchingTab.locator('#account-invite-code').fill(inviteCodes.bob_tabs);
   await switchingTab.locator('#account-login-submit').click();
   await expect(switchingTab.locator('[data-action="start"]')).toBeVisible();
 

@@ -1,11 +1,11 @@
 import engine from '../src/engine.js';
 import bank from '../src/questions.js';
-import { HttpError, validPasswordHash } from './auth.mjs';
+import { HttpError, validInviteCode, validInviteCodeHash, validPasswordHash } from './auth.mjs';
+export { validInviteCode } from './auth.mjs';
 
 const questionIds = new Set(bank.questions.map(question => question.id));
 const roles = new Set(bank.roles.map(role => role.id));
 export const validUsername = username => typeof username === 'string' && /^[a-z0-9][a-z0-9_-]{2,31}$/.test(username);
-export const validPassword = password => typeof password === 'string' && password.length >= 12 && password.length <= 128;
 const validName = name => typeof name === 'string' && name.trim().length > 0 && name.length <= 80 && !/[\u0000-\u001f\u007f]/.test(name);
 const plain = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 export const exactKeys = (value, keys) => plain(value) && Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
@@ -13,8 +13,17 @@ export const exactKeys = (value, keys) => plain(value) && Object.keys(value).len
 export function validateAccounts(value) {
   if (!exactKeys(value, ['users']) || !Array.isArray(value.users) || !value.users.length || value.users.length > 1000) throw new Error('Invalid accounts');
   const names = new Set();
+  const inviteHashes = new Set();
   for (const user of value.users) {
-    if (!exactKeys(user, ['username', 'displayName', 'role', 'passwordHash', 'createdAt']) || !validUsername(user.username) || names.has(user.username) || !validName(user.displayName) || !['admin', 'user'].includes(user.role) || !validPasswordHash(user.passwordHash) || typeof user.createdAt !== 'string' || !Number.isFinite(Date.parse(user.createdAt))) throw new Error('Invalid account');
+    const required = ['username', 'displayName', 'role', 'createdAt'];
+    const allowed = [...required, 'passwordHash', 'inviteCodeHash'];
+    if (!plain(user) || !required.every(key => Object.hasOwn(user, key)) || Object.keys(user).some(key => !allowed.includes(key)) || !validUsername(user.username) || names.has(user.username) || !validName(user.displayName) || !['admin', 'user'].includes(user.role) || typeof user.createdAt !== 'string' || !Number.isFinite(Date.parse(user.createdAt))) throw new Error('Invalid account');
+    if (!Object.hasOwn(user, 'passwordHash') && !Object.hasOwn(user, 'inviteCodeHash')) throw new Error('Account credential hash required');
+    if (Object.hasOwn(user, 'passwordHash') && !validPasswordHash(user.passwordHash)) throw new Error('Invalid legacy password hash');
+    if (Object.hasOwn(user, 'inviteCodeHash')) {
+      if (!validInviteCodeHash(user.inviteCodeHash) || inviteHashes.has(user.inviteCodeHash.toLowerCase())) throw new Error('Invalid or duplicate invite code hash');
+      inviteHashes.add(user.inviteCodeHash.toLowerCase());
+    }
     names.add(user.username);
   }
   if (!value.users.some(user => user.role === 'admin')) throw new Error('Administrator required');
@@ -22,7 +31,7 @@ export function validateAccounts(value) {
 }
 
 export function validateNewUser(body) {
-  if (!exactKeys(body, ['username', 'displayName', 'password']) || !validUsername(body.username) || !validName(body.displayName) || !validPassword(body.password)) throw new HttpError(400, '用户名需为 3–32 位小写字母、数字、下划线或连字符；姓名需为 1–80 字，密码需为 12–128 字。');
+  if (!exactKeys(body, ['username', 'displayName', 'inviteCode']) || !validUsername(body.username) || !validName(body.displayName) || !validInviteCode(body.inviteCode)) throw new HttpError(400, '用户名需为 3–32 位小写字母、数字、下划线或连字符；姓名需为 1–80 字，邀请码需为 4–12 位数字。');
 }
 
 export function validateState(state) {

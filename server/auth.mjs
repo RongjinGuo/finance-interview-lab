@@ -1,7 +1,5 @@
-import { randomBytes, scrypt as deriveKey, timingSafeEqual, createHash } from 'node:crypto';
-import { promisify } from 'node:util';
+import { randomBytes, timingSafeEqual, createHash, createHmac } from 'node:crypto';
 
-const scrypt = promisify(deriveKey);
 const SESSION_MS = 12 * 60 * 60 * 1000;
 const WINDOW_MS = 15 * 60 * 1000;
 const COOKIE = 'finance_account_session';
@@ -19,27 +17,23 @@ export function validPasswordHash(value) {
   return typeof value === 'string' && /^[a-f0-9]{32}:[a-f0-9]{128}$/i.test(value);
 }
 
-export async function hashPassword(password) {
-  const salt = randomBytes(16).toString('hex');
-  const hash = await scrypt(password, salt, 64);
-  return `${salt}:${hash.toString('hex')}`;
-}
+export const validInviteCode = value => typeof value === 'string' && /^[0-9]{4,12}$/.test(value);
+export const validInviteCodeHash = value => typeof value === 'string' && /^[a-f0-9]{64}$/i.test(value);
 
-async function checkPassword(password, encoded) {
-  if (!validPasswordHash(encoded)) return false;
-  const [salt, expected] = encoded.split(':');
-  const actual = await scrypt(password, salt, 64);
-  return timingSafeEqual(actual, Buffer.from(expected, 'hex'));
+export function hashInviteCode(inviteCode, inviteCodeSecret) {
+  if (typeof inviteCodeSecret !== 'string' || inviteCodeSecret.length < 32) throw new Error('INVITE_CODE_SECRET must contain at least 32 characters.');
+  if (!validInviteCode(inviteCode)) throw new Error('Invite code must contain 4-12 digits as a string.');
+  return createHmac('sha256', inviteCodeSecret).update(inviteCode).digest('hex');
 }
 
 export function publicUser(user, includeCreatedAt = false) {
   return { username: user.username, displayName: user.displayName, role: user.role, ...(includeCreatedAt ? { createdAt: user.createdAt } : {}) };
 }
 
-export async function createAuth({ secureCookies, now }) {
+export async function createAuth({ secureCookies, now, inviteCodeSecret }) {
+  if (typeof inviteCodeSecret !== 'string' || inviteCodeSecret.length < 32) throw new Error('INVITE_CODE_SECRET must contain at least 32 characters.');
   const sessions = new Map();
   const attempts = new Map();
-  const dummyHash = await hashPassword(randomBytes(32).toString('hex'));
   const digest = value => createHash('sha256').update(value).digest('hex');
   function prune(map, limit) {
     for (const [key, entry] of map) if (entry.expiresAt <= now()) map.delete(key);
@@ -60,22 +54,27 @@ export async function createAuth({ secureCookies, now }) {
     entry.count++;
     attempts.set(key, entry);
     if (entry.count > limit) throw new HttpError(429, '登录尝试过多，请稍后再试。', {}, { 'Retry-After': String(Math.max(1, Math.ceil((entry.expiresAt - now()) / 1000))) });
+    return entry;
   }
   return {
-    async login(request, username, password, users) {
+    async login(request, inviteCode, users) {
       prune(attempts, 10000);
       const peer = request.socket.remoteAddress || 'unknown';
-      const accountKey = `${peer}:${username}`;
-      reserveAttempt(`peer:${peer}`, 100);
-      reserveAttempt(accountKey, 5);
+      const peerKey = `peer:${peer}`;
+      reserveAttempt('global', 100);
+      const peerAttempt = reserveAttempt(peerKey, 5);
       const availableUsers = typeof users === 'function' ? await users() : users;
-      const user = availableUsers.find(candidate => candidate.username === username);
-      const valid = await checkPassword(password, user?.passwordHash || dummyHash);
-      if (!valid || !user) throw new HttpError(401, '用户名或密码不正确。');
-      attempts.delete(accountKey);
+      const suppliedHash = Buffer.from(hashInviteCode(inviteCode, inviteCodeSecret), 'hex');
+      let user;
+      for (const candidate of availableUsers) {
+        if (validInviteCodeHash(candidate.inviteCodeHash) && timingSafeEqual(suppliedHash, Buffer.from(candidate.inviteCodeHash, 'hex'))) user = candidate;
+      }
+      if (!user) throw new HttpError(401, '邀请码不正确，请重试。');
+      peerAttempt.count--;
+      if (peerAttempt.count === 0 && attempts.get(peerKey) === peerAttempt) attempts.delete(peerKey);
       prune(sessions, 10000);
       const token = randomBytes(32).toString('hex');
-      sessions.set(digest(token), { username, expiresAt: now() + SESSION_MS });
+      sessions.set(digest(token), { username: user.username, expiresAt: now() + SESSION_MS });
       return { user: publicUser(user), cookie: cookie(token, SESSION_MS / 1000) };
     },
     authenticate(request, users) {

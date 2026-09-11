@@ -1,16 +1,19 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { scryptSync } = require('node:crypto');
+const { scryptSync, createHmac } = require('node:crypto');
 const path = require('node:path');
 
 const publicOrigin = 'https://accounts.example.test';
 const password = 'account-test-password-927';
 const salt = '18c7d90133a62f16967dfe3d63d12fff';
 const passwordHash = `${salt}:${scryptSync(password, salt, 64).toString('hex')}`;
+const inviteCodeSecret = 'synthetic-test-secret-for-invite-hmac-at-least-32-chars';
+const inviteCodes = { admin: '8301', alice: '0462', bobby: '7258', new_user: '6184', cache_user: '9374' };
+const testInviteHash = code => createHmac('sha256', inviteCodeSecret).update(code).digest('hex');
 const initialUsers = [
-  { username: 'admin', displayName: '管理员', role: 'admin', passwordHash },
-  { username: 'alice', displayName: 'Alice', role: 'user', passwordHash },
-  { username: 'bobby', displayName: 'Bobby', role: 'user', passwordHash }
+  { username: 'admin', displayName: '管理员', role: 'admin', inviteCodeHash: testInviteHash(inviteCodes.admin), passwordHash },
+  { username: 'alice', displayName: 'Alice', role: 'user', inviteCodeHash: testInviteHash(inviteCodes.alice) },
+  { username: 'bobby', displayName: 'Bobby', role: 'user', inviteCodeHash: testInviteHash(inviteCodes.bobby) }
 ];
 const state = () => ({ settings: { role: 'accounting', mode: 'practice', count: 6 }, active: null, history: [], favorites: [] });
 let createApp;
@@ -43,7 +46,7 @@ function memoryStore() {
 async function fixture(t, options = {}) {
   const store = options.store || memoryStore();
   let now = Date.now();
-  const app = await createApp({ root: path.resolve(__dirname, '..'), store, publicOrigin, initialUsers, now: () => now, ...options });
+  const app = await createApp({ root: path.resolve(__dirname, '..'), store, publicOrigin, initialUsers, inviteCodeSecret, now: () => now, ...options });
   await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
   t.after(() => app.close());
   const base = `http://127.0.0.1:${app.server.address().port}`;
@@ -56,7 +59,7 @@ async function fixture(t, options = {}) {
     });
   }
   async function login(username = 'alice') {
-    const response = await request('/api/login', { method: 'POST', body: { username, password } });
+    const response = await request('/api/login', { method: 'POST', body: { inviteCode: inviteCodes[username] } });
     assert.equal(response.status, 200, await response.clone().text());
     const cookie = response.headers.get('set-cookie').split(';')[0];
     accountByCookie.set(cookie, username);
@@ -75,7 +78,7 @@ test('health only becomes ready after Git initialization and valid account boots
   const response = await unavailable.request('/api/health');
   assert.equal(response.status, 503);
   assert.ok(!(await response.text()).includes('private-key'));
-  assert.equal((await unavailable.request('/api/login', { method: 'POST', body: { username: 'alice', password } })).status, 503);
+  assert.equal((await unavailable.request('/api/login', { method: 'POST', body: { inviteCode: inviteCodes.alice } })).status, 503);
 });
 
 test('bootstrap never overwrites existing accounts', async t => {
@@ -89,7 +92,7 @@ test('bootstrap never overwrites existing accounts', async t => {
 
 test('login cookies use configured HTTPS origin behind an HTTP reverse proxy', async t => {
   const f = await fixture(t);
-  const login = await f.request('/api/login', { method: 'POST', body: { username: 'alice', password } });
+  const login = await f.request('/api/login', { method: 'POST', body: { inviteCode: inviteCodes.alice } });
   assert.equal(login.status, 200);
   assert.deepEqual(await login.json(), { user: { username: 'alice', displayName: 'Alice', role: 'user' } });
   const cookie = login.headers.get('set-cookie');
@@ -122,7 +125,7 @@ test('all mutations enforce PUBLIC_ORIGIN and ignore spoofed forwarding headers'
     const response = await f.request(route, { method: route === '/api/state' ? 'PUT' : 'POST', cookie, body: {}, headers: { Origin: 'https://evil.example', Host: 'evil.example', 'X-Forwarded-Host': 'evil.example', 'X-Forwarded-Proto': 'https' } });
     assert.equal(response.status, 403, route);
   }
-  assert.equal((await f.request('/api/login', { method: 'POST', body: { username: 'alice', password }, headers: { Origin: '' } })).status, 403);
+  assert.equal((await f.request('/api/login', { method: 'POST', body: { inviteCode: inviteCodes.alice }, headers: { Origin: '' } })).status, 403);
   assert.equal((await f.request('/api/session', { cookie })).status, 200);
 });
 
@@ -169,16 +172,18 @@ test('state validator rejects malformed settings, sessions, answers, history, an
   for (const revision of [-1, 1.2, '1']) assert.equal((await f.request('/api/state', { method: 'PUT', cookie, body: { revision, mutationId: 'bad-version', state: state() } })).status, 400);
 });
 
-test('admin creates ordinary accounts and can read records without exposing password hashes', async t => {
+test('admin creates ordinary accounts and can read records without exposing credential hashes', async t => {
   const f = await fixture(t);
   const admin = await f.login('admin');
-  const response = await f.request('/api/admin/users', { method: 'POST', cookie: admin, body: { username: 'new_user', displayName: '新用户', password } });
+  const response = await f.request('/api/admin/users', { method: 'POST', cookie: admin, body: { username: 'new_user', displayName: '新用户', inviteCode: inviteCodes.new_user } });
   assert.equal(response.status, 201);
   const created = (await response.json()).user;
   assert.equal(created.role, 'user');
   assert.ok(!Object.hasOwn(created, 'passwordHash'));
   const saved = (await f.store.read('accounts.json')).users.find(user => user.username === 'new_user');
-  assert.match(saved.passwordHash, /^[a-f0-9]{32}:[a-f0-9]{128}$/);
+  assert.equal(saved.inviteCodeHash, testInviteHash(inviteCodes.new_user));
+  assert.ok(!Object.hasOwn(saved, 'inviteCode'));
+  assert.ok(!Object.hasOwn(saved, 'passwordHash'));
   assert.ok(!JSON.stringify(await f.store.read('accounts.json')).includes(password));
   assert.ok(await f.login('new_user'));
   const users = await (await f.request('/api/admin/users', { cookie: admin })).json();
@@ -186,8 +191,8 @@ test('admin creates ordinary accounts and can read records without exposing pass
   assert.ok(!JSON.stringify(users).includes('passwordHash'));
   assert.equal((await f.request('/api/admin/users/alice/state', { cookie: admin })).status, 200);
   assert.equal((await f.request('/api/admin/users/missing/state', { cookie: admin })).status, 404);
-  assert.equal((await f.request('/api/admin/users', { method: 'POST', cookie: admin, body: { username: 'new_user', displayName: 'Duplicate', password } })).status, 409);
-  for (const body of [{ username: '../escape', displayName: 'x', password }, { username: 'short', displayName: 'x', password: 'short' }, { username: 'long', displayName: 'x', password: 'x'.repeat(129) }, { username: 'bad-role', displayName: 'x', password, role: 'admin' }]) assert.equal((await f.request('/api/admin/users', { method: 'POST', cookie: admin, body })).status, 400);
+  assert.equal((await f.request('/api/admin/users', { method: 'POST', cookie: admin, body: { username: 'new_user', displayName: 'Duplicate', inviteCode: inviteCodes.new_user } })).status, 409);
+  for (const body of [{ username: '../escape', displayName: 'x', inviteCode: '9451' }, { username: 'short', displayName: 'x', inviteCode: '12' }, { username: 'long', displayName: 'x', inviteCode: '9'.repeat(13) }, { username: 'bad-role', displayName: 'x', inviteCode: '9451', role: 'admin' }]) assert.equal((await f.request('/api/admin/users', { method: 'POST', cookie: admin, body })).status, 400);
 });
 
 test('failed storage pushes are never acknowledged as a cloud save', async t => {
@@ -199,7 +204,7 @@ test('failed storage pushes are never acknowledged as a cloud save', async t => 
   assert.equal((await (await f.request('/api/state', { cookie })).json()).revision, 0);
 });
 
-test('logout and expiration revoke sessions; password attempts are bounded', async t => {
+test('logout and expiration revoke sessions; changing invite-code guesses remain bounded', async t => {
   const f = await fixture(t);
   const cookie = await f.login();
   const response = await f.request('/api/logout', { method: 'POST', cookie });
@@ -210,7 +215,7 @@ test('logout and expiration revoke sessions; password attempts are bounded', asy
   f.advance(12 * 3600000 + 1);
   assert.equal((await f.request('/api/session', { cookie: expiring })).status, 401);
   let failed;
-  for (let index = 0; index < 7; index++) failed = await f.request('/api/login', { method: 'POST', body: { username: 'alice', password: 'incorrect-password' }, headers: { 'X-Forwarded-For': `8.8.8.${index}` } });
+  for (let index = 0; index < 7; index++) failed = await f.request('/api/login', { method: 'POST', body: { inviteCode: String(9400 + index) }, headers: { 'X-Forwarded-For': `8.8.8.${index}` } });
   assert.equal(failed.status, 429);
   assert.ok(Number(failed.headers.get('retry-after')) > 0);
 });
@@ -230,7 +235,7 @@ test('HTTP configuration requires explicit local mode and loopback origin', asyn
   await assert.rejects(() => createApp({ store: memoryStore(), publicOrigin: 'http://example.com', initialUsers }), /HTTPS|https/);
   await assert.rejects(() => createApp({ store: memoryStore(), publicOrigin: 'http://example.com', localDev: true, initialUsers }), /HTTPS|https/);
   const f = await fixture(t, { publicOrigin: 'http://localhost:7860', localDev: true });
-  const response = await f.request('/api/login', { method: 'POST', body: { username: 'alice', password } });
+  const response = await f.request('/api/login', { method: 'POST', body: { inviteCode: inviteCodes.alice } });
   assert.equal(response.status, 200);
   assert.ok(!response.headers.get('set-cookie').includes('; Secure'));
 });
@@ -248,7 +253,7 @@ test('unauthenticated traffic and login attempts never fetch remote accounts aft
     assert.equal((await f.request('/api/admin/users', { cookie: 'finance_account_session=forged' })).status, 401);
   }
   let response;
-  for (let index = 0; index < 7; index++) response = await f.request('/api/login', { method: 'POST', body: { username: 'alice', password: 'invalid-password' } });
+  for (let index = 0; index < 7; index++) response = await f.request('/api/login', { method: 'POST', body: { inviteCode: String(9500 + index) } });
   assert.equal(response.status, 429);
   assert.equal(reads, 0, 'Unauthenticated requests must not enqueue Git fetches, even after cache expiry');
   assert.equal((await f.request('/api/logout', { method: 'POST', cookie })).status, 200);
@@ -280,7 +285,7 @@ test('authenticated account cache refresh is single-flight and honors external a
 test('new accounts are immediately usable from updated cache without an extra Git fetch', async t => {
   const f = await fixture(t);
   const admin = await f.login('admin');
-  assert.equal((await f.request('/api/admin/users', { method: 'POST', cookie: admin, body: { username: 'cache_user', displayName: 'Cached user', password } })).status, 201);
+  assert.equal((await f.request('/api/admin/users', { method: 'POST', cookie: admin, body: { username: 'cache_user', displayName: 'Cached user', inviteCode: inviteCodes.cache_user } })).status, 201);
   const originalRead = f.store.read;
   f.store.read = async function(file) { if (file === 'accounts.json') throw new Error('Unexpected remote account read'); return originalRead.call(this, file); };
   assert.ok(await f.login('cache_user'));
@@ -352,4 +357,61 @@ test('authenticated state requests without an expected account fail without Git 
   }
   assert.equal(reads, 0);
   assert.equal((await f.request('/api/session', { cookie })).status, 200);
+});
+
+test('invite login preserves leading zeros and refuses numeric, malformed, or password credentials', async t => {
+  const f = await fixture(t);
+  const response = await f.request('/api/login', { method: 'POST', body: { inviteCode: inviteCodes.alice } });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).user.username, 'alice');
+  for (const body of [{ inviteCode: Number(inviteCodes.alice) }, { inviteCode: '462' }, { inviteCode: ' 0462' }, { inviteCode: 'abcd' }, { inviteCode: '9'.repeat(13) }, { username: 'admin', password }, { inviteCode: inviteCodes.admin, username: 'admin' }]) {
+    assert.equal((await f.request('/api/login', { method: 'POST', body })).status, 400);
+  }
+});
+
+test('legacy password accounts remain valid during migration but passwords cannot authenticate', async t => {
+  const store = memoryStore();
+  const legacy = { users: [{ username: 'admin', displayName: 'Legacy admin', role: 'admin', passwordHash, createdAt: new Date().toISOString() }] };
+  store.files.set('accounts.json', structuredClone(legacy));
+  const f = await fixture(t, { store });
+  assert.equal((await f.request('/api/health')).status, 200);
+  assert.equal((await f.request('/api/login', { method: 'POST', body: { username: 'admin', password } })).status, 400);
+  assert.equal((await f.request('/api/login', { method: 'POST', body: { inviteCode: inviteCodes.admin } })).status, 401);
+  assert.deepEqual(await store.read('accounts.json'), legacy);
+});
+
+test('invite digests require a server secret and match HMAC without coercing leading zeros', async () => {
+  const { hashInviteCode } = await import('../server/auth.mjs');
+  assert.equal(typeof hashInviteCode, 'function');
+  assert.equal(hashInviteCode(inviteCodes.alice, inviteCodeSecret), testInviteHash(inviteCodes.alice));
+  assert.notEqual(hashInviteCode(inviteCodes.alice, inviteCodeSecret), hashInviteCode(inviteCodes.alice, `${inviteCodeSecret}-other`));
+  await assert.rejects(() => createApp({ store: memoryStore(), publicOrigin, initialUsers }), /INVITE_CODE_SECRET/);
+  await assert.rejects(() => createApp({ store: memoryStore(), publicOrigin, initialUsers, inviteCodeSecret: 'short' }), /INVITE_CODE_SECRET/);
+});
+
+test('duplicate invite codes cannot create a second account, including concurrent creation', async t => {
+  const f = await fixture(t);
+  const admin = await f.login('admin');
+  const duplicate = await f.request('/api/admin/users', { method: 'POST', cookie: admin, body: { username: 'duplicate_code', displayName: 'Duplicate', inviteCode: inviteCodes.admin } });
+  assert.equal(duplicate.status, 409);
+  const responses = await Promise.all(['concurrent_one', 'concurrent_two'].map(username => f.request('/api/admin/users', { method: 'POST', cookie: admin, body: { username, displayName: username, inviteCode: '6843' } })));
+  assert.deepEqual(responses.map(response => response.status).sort(), [201, 409]);
+  const accounts = await f.store.read('accounts.json');
+  assert.equal(accounts.users.filter(user => user.inviteCodeHash === testInviteHash('6843')).length, 1);
+  assert.ok(accounts.users.every(user => !Object.hasOwn(user, 'inviteCode')));
+  const listed = await (await f.request('/api/admin/users', { cookie: admin })).json();
+  assert.ok(listed.users.every(user => !Object.hasOwn(user, 'inviteCodeHash') && !Object.hasOwn(user, 'passwordHash')));
+});
+
+test('successful ordinary invite login cannot reset earlier failed code guesses', async t => {
+  const f = await fixture(t);
+  for (let index = 0; index < 4; index++) {
+    const response = await f.request('/api/login', { method: 'POST', body: { inviteCode: String(9560 + index) } });
+    assert.equal(response.status, 401);
+  }
+  assert.ok(await f.login('alice'));
+  assert.equal((await f.request('/api/login', { method: 'POST', body: { inviteCode: '9564' } })).status, 401);
+  const blocked = await f.request('/api/login', { method: 'POST', body: { inviteCode: '9565' } });
+  assert.equal(blocked.status, 429);
+  assert.ok(Number(blocked.headers.get('retry-after')) > 0);
 });

@@ -162,9 +162,9 @@
   function lock(reason = '') {
     user = null; closeManager(); sync?.disconnect(); adapter?.onLock?.();
     $('app').hidden = true; $('account-toolbar').hidden = true; $('account-conflict').hidden = true; $('account-other-drafts').hidden = true; $('account-gate').hidden = false;
-    $('account-username').disabled = false; $('account-password').disabled = false;
-    $('account-password').value = ''; $('account-login-submit').disabled = false; $('account-login-submit').textContent = '登录并继续练习 →';
-    notice('account-login-error', reason); $('account-username').focus();
+    $('account-invite-code').disabled = false;
+    $('account-invite-code').value = ''; $('account-login-submit').disabled = false; $('account-login-submit').textContent = '登录并继续练习 →';
+    notice('account-login-error', reason); $('account-invite-code').focus();
   }
   async function enter(nextUser) {
     const remote = await api('/api/state', { headers: { 'X-Finance-Account': nextUser.username } });
@@ -172,7 +172,7 @@
     $('account-gate').hidden = true; $('account-toolbar').hidden = false; $('app').hidden = false;
     $('account-current-user').textContent = `${user.displayName || user.username} · ${user.username}`;
     $('account-admin').hidden = user.role !== 'admin';
-    sync.connect(user, remote); renderOtherDrafts(); $('account-password').value = '';
+    sync.connect(user, remote); renderOtherDrafts(); $('account-invite-code').value = '';
   }
   function updateStatus(status) {
     $('account-sync-status').textContent = status.kind === 'saved' && !status.updatedAt ? '账号已连接 · 尚无云端记录' : statusLabels[status.kind] || '等待同步';
@@ -182,7 +182,7 @@
     $('account-backup').hidden = !status.dirty;
     if (status.updatedAt && status.kind === 'saved') $('account-sync-status').title = new Date(status.updatedAt).toLocaleString('zh-CN');
     else $('account-sync-status').removeAttribute('title');
-    if (status.kind === 'expired') queueMicrotask(() => lock('登录已过期，请使用原账号登录以继续同步本机草稿。'));
+    if (status.kind === 'expired') queueMicrotask(() => lock('登录已过期，请使用原邀请码登录以继续同步本机草稿。'));
   }
   function renderOtherDrafts() {
     const drafts = sync?.availableDrafts() || [];
@@ -196,15 +196,15 @@
   }
   function createChrome() {
     const host = document.createElement('div'); host.id = 'account-ui';
-    host.innerHTML = `<section id="account-gate" class="account-gate" aria-labelledby="account-login-title"><div class="account-login-intro"><p class="eyebrow">FINANCE INTERVIEW LAB</p><h1 id="account-login-title">把每一次准备，<br>接着写下去。</h1><p>登录你的练习账号，保存回答与复盘，<br>在下一台设备继续上次的进度。</p><span class="account-login-leaf" aria-hidden="true">✳</span></div><section class="panel account-login-card"><span class="eyebrow">YOUR PRACTICE SPACE</span><h2>欢迎回来</h2><p class="muted">使用管理员提供的账号登录。</p><form id="account-login-form"><label for="account-username">用户名</label><input id="account-username" name="username" disabled autocomplete="username" pattern="[a-z0-9][a-z0-9_-]{2,31}" required maxlength="32"><label for="account-password">密码</label><input id="account-password" name="password" disabled type="password" autocomplete="current-password" required maxlength="128"><p id="account-login-error" class="account-error" role="alert" hidden></p><button id="account-login-submit" class="button" type="submit" disabled>正在检查登录状态…</button></form><p class="account-login-note">需要账号？请联系管理员。</p></section></section>
+    host.innerHTML = `<section id="account-gate" class="account-gate" aria-labelledby="account-login-title"><div class="account-login-intro"><p class="eyebrow">FINANCE INTERVIEW LAB</p><h1 id="account-login-title">把每一次准备，<br>接着写下去。</h1><p>输入邀请码，保存回答与复盘，<br>在下一台设备继续上次的进度。</p><span class="account-login-leaf" aria-hidden="true">✳</span></div><section class="panel account-login-card"><span class="eyebrow">YOUR PRACTICE SPACE</span><h2>欢迎回来</h2><p class="muted">输入管理员提供的邀请码，即可继续。</p><form id="account-login-form"><label for="account-invite-code">邀请码</label><input id="account-invite-code" name="inviteCode" disabled type="text" inputmode="numeric" autocomplete="off" pattern="[0-9]{4,12}" minlength="4" maxlength="12" required aria-describedby="account-login-error"><p id="account-login-error" class="account-error" role="alert" hidden></p><button id="account-login-submit" class="button" type="submit" disabled>正在检查登录状态…</button></form><p class="account-login-note">需要邀请码？请联系管理员。</p></section></section>
       <header id="account-toolbar" class="account-toolbar" hidden><span id="account-current-user"></span><span id="account-sync-status" role="status" aria-live="polite"></span><div class="account-toolbar-actions"><button id="account-save" class="button secondary small" type="button">立即保存</button><button id="account-backup" class="link-button" type="button" hidden>下载草稿</button><button id="account-admin" class="link-button" type="button" hidden>用户与记录</button><button id="account-logout" class="link-button" type="button">退出登录</button></div></header>
       <section id="account-conflict" class="account-conflict" role="alert" hidden><div><strong>另一台设备已更新这份练习</strong><p>当前草稿已保留。请先下载备份，再选择以本机草稿覆盖云端，或载入云端记录。</p></div><div class="account-conflict-actions"><button id="account-download-draft" class="button secondary small" type="button">下载本机草稿</button><button id="account-keep-local" class="button small" type="button">保留本机并覆盖云端</button><button id="account-use-server" class="button secondary small" type="button">载入云端记录</button></div></section>`;
     host.insertAdjacentHTML('beforeend', '<details id="account-other-drafts" class="account-other-drafts" hidden><summary id="account-draft-summary"></summary><p>这些草稿来自其他页面。载入后可继续练习和同步，原草稿备份会保留。</p><div id="account-draft-list"></div><p id="account-draft-error" class="account-error" role="alert" hidden></p></details>');
     document.body.prepend(host); $('app').hidden = true;
     $('account-login-form').addEventListener('submit', async event => {
       event.preventDefault(); const button = $('account-login-submit'); button.disabled = true; button.textContent = '正在登录…'; notice('account-login-error', '');
-      try { const result = await api('/api/login', { method: 'POST', body: { username: $('account-username').value.trim().toLowerCase(), password: $('account-password').value } }); await enter(result.user); }
-      catch (error) { notice('account-login-error', error.status === 401 ? '用户名或密码不正确。' : error.status === 429 ? '登录尝试过于频繁，请稍后再试。' : error.message || '暂时无法连接，请稍后重试。'); }
+      try { const result = await api('/api/login', { method: 'POST', body: { inviteCode: $('account-invite-code').value } }); await enter(result.user); }
+      catch (error) { notice('account-login-error', error.status === 401 ? '邀请码不正确，请重新输入。' : error.status === 429 ? '登录尝试过于频繁，请稍后再试。' : error.message || '暂时无法连接，请稍后重试。'); }
       finally { button.disabled = false; button.textContent = '登录并继续练习 →'; }
     });
     $('account-save').addEventListener('click', () => { adapter.capture(); sync.flush(); });
@@ -225,7 +225,7 @@
       adapter.capture(); const button = $('account-logout'); button.disabled = true;
       try {
         await sync.flush();
-        if (sync.status().dirty && !confirm('还有未同步的草稿，已保存在此浏览器。退出后需要用同一账号登录才能继续同步。仍然退出？')) return;
+        if (sync.status().dirty && !confirm('还有未同步的草稿，已保存在此浏览器。退出后需要用同一邀请码登录才能继续同步。仍然退出？')) return;
         await api('/api/logout', { method: 'POST' }); lock();
       } catch (error) { if (error.status === 401) lock(); else { notice('account-toolbar-error', '退出失败，请检查网络后重试。'); root.alert('退出失败，请检查网络后重试。'); } }
       finally { button.disabled = false; }
@@ -267,14 +267,14 @@
     if (user?.role !== 'admin') return;
     adapter.capture(); sync.flush(); managerReturn = document.activeElement; adminGeneration++;
     const modal = document.createElement('div'); modal.id = 'account-manager'; modal.className = 'account-manager-backdrop';
-    modal.innerHTML = `<section class="account-manager" role="dialog" aria-modal="true" aria-labelledby="account-manager-title"><header class="account-manager-header"><div><span class="eyebrow">PRACTICE MANAGEMENT</span><h2 id="account-manager-title">用户与练习记录</h2></div><button id="account-manager-close" class="button secondary small" type="button">关闭</button></header><p id="account-manager-error" class="account-error" role="alert" hidden></p><div class="account-manager-grid"><aside><details class="account-create"><summary>创建练习账号</summary><form id="account-create-user"><label for="new-username">用户名</label><input id="new-username" name="username" required pattern="[a-z0-9][a-z0-9_-]{2,31}" minlength="3" maxlength="32" autocomplete="off" placeholder="3–32 位小写字母、数字、_ 或 -"><label for="new-display-name">显示名称</label><input id="new-display-name" name="displayName" required maxlength="80" autocomplete="off"><label for="new-password">初始密码</label><input id="new-password" name="password" type="password" required minlength="12" maxlength="128" autocomplete="new-password"><small>密码至少 12 位，请单独告知使用者。</small><button class="button" type="submit">创建账号</button><p id="account-create-status" role="status" hidden></p></form></details><div class="account-user-heading"><h3>全部账号</h3><span id="account-user-total"></span></div><div id="account-user-list"><p class="muted">正在加载…</p></div></aside><section id="account-user-records" class="account-user-records"><div class="account-record-empty">选择一个账号，查看每一道题的回答与自评。</div></section></div></section>`;
+    modal.innerHTML = `<section class="account-manager" role="dialog" aria-modal="true" aria-labelledby="account-manager-title"><header class="account-manager-header"><div><span class="eyebrow">PRACTICE MANAGEMENT</span><h2 id="account-manager-title">用户与练习记录</h2></div><button id="account-manager-close" class="button secondary small" type="button">关闭</button></header><p id="account-manager-error" class="account-error" role="alert" hidden></p><div class="account-manager-grid"><aside><details class="account-create"><summary>创建练习账号</summary><form id="account-create-user"><label for="new-username">用户名</label><input id="new-username" name="username" required pattern="[a-z0-9][a-z0-9_-]{2,31}" minlength="3" maxlength="32" autocomplete="off" placeholder="3–32 位小写字母、数字、_ 或 -"><label for="new-display-name">显示名称</label><input id="new-display-name" name="displayName" required maxlength="80" autocomplete="off"><label for="new-invite-code">邀请码</label><input id="new-invite-code" name="inviteCode" type="text" inputmode="numeric" autocomplete="off" pattern="[0-9]{4,12}" required minlength="4" maxlength="12"><small>设置 4–12 位数字邀请码，请单独告知使用者。</small><button class="button" type="submit">创建账号</button><p id="account-create-status" role="status" hidden></p></form></details><div class="account-user-heading"><h3>全部账号</h3><span id="account-user-total"></span></div><div id="account-user-list"><p class="muted">正在加载…</p></div></aside><section id="account-user-records" class="account-user-records"><div class="account-record-empty">选择一个账号，查看每一道题的回答与自评。</div></section></div></section>`;
     document.body.append(modal); document.body.style.overflow = 'hidden'; $('account-manager-close').focus();
     $('account-manager-close').addEventListener('click', closeManager);
     $('account-user-list').addEventListener('click', event => { const button = event.target.closest('[data-account-user]'); if (button) readUser(button.dataset.accountUser); });
     $('account-create-user').addEventListener('submit', async event => {
       event.preventDefault(); const button = event.target.querySelector('button'); button.disabled = true; notice('account-manager-error', '');
       const username = $('new-username').value.trim();
-      try { await api('/api/admin/users', { method: 'POST', body: { username, displayName: $('new-display-name').value.trim(), password: $('new-password').value } }); event.target.reset(); notice('account-create-status', `账号 ${username} 已创建。`); await loadUsers(); }
+      try { await api('/api/admin/users', { method: 'POST', body: { username, displayName: $('new-display-name').value.trim(), inviteCode: $('new-invite-code').value } }); event.target.reset(); notice('account-create-status', `账号 ${username} 已创建。`); await loadUsers(); }
       catch (error) { if (error.status === 401) lock('请重新登录。'); else notice('account-manager-error', error.message); }
       finally { button.disabled = false; }
     });

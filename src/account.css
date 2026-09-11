@@ -11,6 +11,8 @@
 .account-login-card .muted { font-size: 12px; margin-bottom: 25px; }
 .account-login-card label, .account-create label { display: block; margin: 15px 0 7px; font-size: 11px; color: #63715a; }
 .account-login-card input, .account-create input { width: 100%; padding: 10px 12px; min-height: 43px; font-size: 13px; background: #fbfcf5; border: 1px solid #cfd8c2; border-radius: 5px; color: var(--ink); }
+#account-invite-code { font-size: 23px; letter-spacing: 5px; font-variant-numeric: tabular-nums; min-height: 53px; }
+#new-invite-code { letter-spacing: 3px; font-variant-numeric: tabular-nums; }
 .account-login-card button { width: 100%; margin-top: 22px; }
 .account-login-note { font-size: 10px; color: var(--muted); text-align: center; margin: 23px 0 0; }
 .account-error { font-size: 12px; color: #904b31; border: 1px solid #e4c7b2; background: #fbeedd; border-radius: 5px; padding: 11px 13px; margin: 14px 0 0; overflow-wrap: anywhere; }

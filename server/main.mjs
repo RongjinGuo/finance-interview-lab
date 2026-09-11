@@ -16,7 +16,7 @@ try {
     authorName: process.env.GIT_AUTHOR_NAME || 'Finance Interview',
     authorEmail: process.env.GIT_AUTHOR_EMAIL || 'finance-interview@users.noreply.github.com'
   });
-  const app = await createApp({ root, store, publicOrigin: process.env.PUBLIC_ORIGIN, localDev: process.env.LOCAL_DEV === 'true', initialUsers });
+  const app = await createApp({ root, store, publicOrigin: process.env.PUBLIC_ORIGIN, localDev: process.env.LOCAL_DEV === 'true', initialUsers, inviteCodeSecret: process.env.INVITE_CODE_SECRET });
   const port = Number(process.env.PORT || 7860);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid port');
   app.server.listen(port, process.env.HOST || '0.0.0.0', () => console.log(`Finance Interview account service listening on port ${port}`));

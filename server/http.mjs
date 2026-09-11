@@ -2,8 +2,8 @@ import http from 'node:http';
 import { readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { createAuth, hashPassword, HttpError, publicUser } from './auth.mjs';
-import { exactKeys, stateEnvelope, validPassword, validUsername, validateAccounts, validateNewUser, validateSave } from './validation.mjs';
+import { createAuth, hashInviteCode, HttpError, publicUser } from './auth.mjs';
+import { exactKeys, stateEnvelope, validInviteCode, validUsername, validateAccounts, validateNewUser, validateSave } from './validation.mjs';
 
 const ASSETS = new Map([
   ['/', 'index.html'], ['/index.html', 'index.html'],
@@ -47,13 +47,13 @@ function requestPath(request) {
   return decoded;
 }
 
-export async function createApp({ root = process.cwd(), store, publicOrigin, localDev = false, initialUsers = [], now = Date.now } = {}) {
+export async function createApp({ root = process.cwd(), store, publicOrigin, localDev = false, initialUsers = [], inviteCodeSecret, now = Date.now } = {}) {
   let origin;
   try { origin = new URL(publicOrigin); } catch { throw new Error('PUBLIC_ORIGIN must be an HTTPS origin.'); }
   const development = (localDev === true || localDev === 'true') && loopback(origin.hostname);
   if (origin.origin !== publicOrigin || (origin.protocol !== 'https:' && !(development && origin.protocol === 'http:'))) throw new Error('PUBLIC_ORIGIN must be an HTTPS origin; HTTP requires LOCAL_DEV and loopback.');
   const secureCookies = origin.protocol === 'https:';
-  const auth = await createAuth({ secureCookies, now });
+  const auth = await createAuth({ secureCookies, now, inviteCodeSecret });
   const rootPath = await realpath(root);
   let ready = false;
   let accountsCache = null;
@@ -126,8 +126,8 @@ export async function createApp({ root = process.cwd(), store, publicOrigin, loc
       if (['POST', 'PUT'].includes(request.method) && request.headers.origin !== publicOrigin) throw new HttpError(403, '请求来源不匹配，请从网站页面重试。');
       if (pathname === '/api/login') {
         const body = await readJson(request, 8192);
-        if (!exactKeys(body, ['username', 'password']) || !validUsername(body.username) || !validPassword(body.password)) throw new HttpError(400, '请输入有效的用户名和 12–128 字密码。');
-        const result = await auth.login(request, body.username, body.password, async () => {
+        if (!exactKeys(body, ['inviteCode']) || !validInviteCode(body.inviteCode)) throw new HttpError(400, '请输入 4–12 位数字邀请码。');
+        const result = await auth.login(request, body.inviteCode, async () => {
           await initialize();
           if (!ready) throw new HttpError(503, '账号存储尚未就绪，请稍后重试。');
           return accountsCache.users;
@@ -156,10 +156,11 @@ export async function createApp({ root = process.cwd(), store, publicOrigin, loc
         else {
           const body = await readJson(request, 8192);
           validateNewUser(body);
-          const account = { username: body.username, displayName: body.displayName.trim(), role: 'user', passwordHash: await hashPassword(body.password), createdAt: new Date(now()).toISOString() };
+          const account = { username: body.username, displayName: body.displayName.trim(), role: 'user', inviteCodeHash: hashInviteCode(body.inviteCode, inviteCodeSecret), createdAt: new Date(now()).toISOString() };
           const updatedAccounts = await store.update('accounts.json', current => {
             const latest = validateAccounts(current);
             if (latest.users.some(candidate => candidate.username === account.username)) throw new HttpError(409, '该用户名已存在。');
+            if (latest.users.some(candidate => candidate.inviteCodeHash?.toLowerCase() === account.inviteCodeHash)) throw new HttpError(409, '该邀请码已被其他账号使用。');
             if (latest.users.length >= 1000) throw new HttpError(400, '账号数量已达到上限。');
             return { users: [...latest.users, account] };
           }, 'Create account');
