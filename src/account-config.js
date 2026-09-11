@@ -1,0 +1,1 @@
+window.FinanceAccountConfig = { enabled: false };

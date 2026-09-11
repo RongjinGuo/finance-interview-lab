@@ -13,3 +13,5 @@ worker/.env*
 worker/public/shared.css
 site/
 artifacts/
+space/
+.space-build-*/

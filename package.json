@@ -1,7 +1,7 @@
 {
   "name": "finance-interview-lab",
   "version": "1.0.0",
-  "description": "Offline finance interview practice",
+  "description": "Finance interview practice with optional hosted accounts and private GitHub sync",
   "main": "index.js",
   "directories": {
     "doc": "docs",
@@ -12,7 +12,10 @@
     "build": "node scripts/build.mjs",
     "start": "node scripts/serve.mjs",
     "test:browser": "playwright test",
+    "test:accounts": "node --test tests/account-browser/*.test.cjs && playwright test --config playwright.accounts.config.cjs",
     "build:site": "node scripts/build-site.mjs",
+    "build:space": "node scripts/build-space.mjs",
+    "start:accounts": "node server/main.mjs",
     "worker:dev": "wrangler dev --config worker/wrangler.jsonc",
     "worker:deploy": "node scripts/build-site.mjs && wrangler deploy --config worker/wrangler.jsonc"
   },

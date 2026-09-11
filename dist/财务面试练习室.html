@@ -1214,6 +1214,7 @@ details[open] summary { margin-bottom: 13px; }
 
   const { roles, questions } = window.FinanceQuestions;
   const engine = window.FinanceEngine;
+  const accounts = window.FinanceAccountConfig?.enabled ? window.FinanceAccounts : null;
   const byId = new Map(questions.map(q => [q.id, q]));
   const STORAGE = 'finance-interview-v1';
   const app = document.getElementById('app');
@@ -1265,8 +1266,10 @@ details[open] summary { margin-bottom: 13px; }
   }
   let state = readState(null);
   try {
-    lastStoredRaw = localStorage.getItem(STORAGE);
-    state = readState(lastStoredRaw);
+    if (!accounts) {
+      lastStoredRaw = localStorage.getItem(STORAGE);
+      state = readState(lastStoredRaw);
+    }
   } catch { storageOK = false; }
 
   let view = 'home';
@@ -1279,6 +1282,7 @@ details[open] summary { margin-bottom: 13px; }
   let modalReturnFocus = null;
 
   function syncFromStorage() {
+    if (accounts) return false;
     try {
       const raw = localStorage.getItem(STORAGE);
       if (raw === lastStoredRaw) return false;
@@ -1299,6 +1303,7 @@ details[open] summary { margin-bottom: 13px; }
     if (event.key === STORAGE || event.key === null) syncFromStorage();
   });
   function persist() {
+    if (accounts) { if (accounts.isReady()) accounts.save(state); return; }
     try {
       // A stale tab must read the newer snapshot before it can write again.
       if (syncFromStorage()) return;
@@ -1328,7 +1333,7 @@ details[open] summary { margin-bottom: 13px; }
   }
   function tick() {
     const now = Date.now();
-    if (state.active && view === 'interview' && state.active.phase === 'answer' && !paused && !document.hidden && !modal) {
+    if (state.active && view === 'interview' && state.active.phase === 'answer' && !paused && !document.hidden && !modal && (!accounts || (accounts.isReady() && !accounts.isOverlayOpen()))) {
       const q = byId.get(state.active.questionIds[state.active.current]);
       const answer = answerFor(state.active, q.id);
       answer.seconds += Math.min((now - timerStamp) / 1000, 2);
@@ -1339,8 +1344,8 @@ details[open] summary { margin-bottom: 13px; }
   }
   setInterval(tick, 1000);
   setInterval(() => { if (state.active && view === 'interview') { saveDraft(); persist(); } }, 5000);
-  document.addEventListener('visibilitychange', () => { timerStamp = Date.now(); saveDraft(); persist(); });
-  window.addEventListener('pagehide', () => { saveDraft(); persist(); });
+  document.addEventListener('visibilitychange', () => { timerStamp = Date.now(); saveDraft(); persist(); if (document.hidden) accounts?.flush(); });
+  window.addEventListener('pagehide', () => { saveDraft(); persist(); accounts?.flush(); });
 
   function navButton(id, label, glyph, count) {
     return `<button data-action="navigate" data-view="${id}" class="${view === id ? 'active' : ''}" ${view === id ? 'aria-current="page"' : ''}>${icon(glyph, 17)}<span>${label}</span>${count ? `<span class="nav-count">${count}</span>` : ''}</button>`;
@@ -1351,7 +1356,7 @@ details[open] summary { margin-bottom: 13px; }
       <aside class="sidebar"><a href="#" class="brand" data-action="navigate" data-view="home" aria-label="财务面试练习室首页"><span class="brand-mark">${icon('chart', 24)}</span><span class="brand-name">财务面试练习室<span class="brand-sub">FINANCE INTERVIEW LAB</span></span></a>
       <div class="nav-caption">你的求职准备站</div><nav class="nav" aria-label="主导航">${navButton('home', '开始练习', 'home')}${navButton('library', '面试题库', 'book', questions.length)}${navButton('favorites', '我的收藏', 'star', state.favorites.length)}${navButton('history', '练习记录', 'clock', state.history.length)}</nav>
       <div class="sidebar-note">${icon('leaf', 23)}<p>每一次练习，<br>都离从容更近一步。</p><small><i class="dot"></i>为财务管理求职者准备</small></div></aside>
-      <div class="workspace"><header class="topbar"><div class="breadcrumb">求职准备 <span>/</span> ${names[view]}</div><div class="local-label">${icon('shield', 14)}${storageOK ? '作答内容保存在本机浏览器' : '存储不可用 · 请及时导出'}</div></header>
+      <div class="workspace"><header class="topbar"><div class="breadcrumb">求职准备 <span>/</span> ${names[view]}</div><div class="local-label">${icon('shield', 14)}${accounts ? '个人练习空间 · 回答随账号保存' : storageOK ? '作答内容保存在本机浏览器' : '存储不可用 · 请及时导出'}</div></header>
       <main class="main" id="main-content">${content}<footer class="footer"><span>FINANCE INTERVIEW LAB · 把准备变成底气</span><span>专业积累 / 清晰表达 / 从容应答</span></footer></main></div></div>`;
   }
   function heroArt() {
@@ -1368,7 +1373,7 @@ details[open] summary { margin-bottom: 13px; }
       <button data-action="select-mode" data-mode="practice" class="mode-card ${settings.mode === 'practice' ? 'selected' : ''}" aria-pressed="${settings.mode === 'practice'}"><span class="radio"></span><span><strong>边练边复盘</strong><small>每题回答后查看思路与追问<br>适合积累经验，打磨回答</small></span></button>
       <button data-action="select-mode" data-mode="mock" class="mode-card ${settings.mode === 'mock' ? 'selected' : ''}" aria-pressed="${settings.mode === 'mock'}"><span class="radio"></span><span><strong>完整模拟面试</strong><small>连续作答，结束后统一复盘<br>适合面试前，找找状态</small></span></button></div>
       <div class="quantity-row"><span class="quantity-label">本场题量</span><div class="quantity">${[6, 10].map(n => `<button data-action="select-count" data-count="${n}" class="${count === n ? 'selected' : ''}" aria-pressed="${count === n}">${n} 题</button>`).join('')}</div><span class="time-estimate">约 ${count === 6 ? '15–20' : '25–35'} 分钟</span></div>
-      <div class="start-row"><button class="button" data-action="start">开始我的面试 ${icon('arrow', 18)}</button><span class="start-note">无需注册，随时暂停<br>准备好了，就从第一题开始</span></div></section>
+      <div class="start-row"><button class="button" data-action="start">开始我的面试 ${icon('arrow', 18)}</button><span class="start-note">${accounts ? '账号专属，随时暂停' : '无需注册，随时暂停'}<br>准备好了，就从第一题开始</span></div></section>
       <aside class="tip-card"><div class="eyebrow">面试官想听见的</div><h3>别只给结论，<br>也讲清你的判断。</h3><p>“利润增长了”之后，再说一层：<br>增长来自哪里？现金流跟上了吗？<br>用一个具体例子，让能力被看见。</p><div class="tip-footer"><span>先结论 → 再依据 → 给行动</span>${icon('message', 20)}</div></aside></div>
       <section class="bottom-strip"><div class="strip-item"><span class="strip-icon">${icon('book', 20)}</span><div><strong>${questions.length} 道精选面试题</strong><small>专业基础、实务情景与求职表达</small></div></div><div class="strip-item"><span class="strip-icon">${icon('target', 20)}</span><div><strong>每一道题，都有复盘方向</strong><small>对照回答要点，勾选自评掌握情况</small></div></div><div class="strip-item"><span class="strip-icon">${icon('file', 20)}</span><div><strong>留下自己的进步轨迹</strong><small>保存练习记录，导出完整面试复盘</small></div></div></section>`;
   }
@@ -1419,6 +1424,7 @@ details[open] summary { margin-bottom: 13px; }
     stopSpeech(); paused = false;
     if (s.mode === 'practice') { s.phase = 'review'; persist(); render(); }
     else advance();
+    accounts?.flush();
   }
   function advance() {
     const s = state.active;
@@ -1431,6 +1437,7 @@ details[open] summary { margin-bottom: 13px; }
       state.history.unshift(s); state.history = state.history.slice(0, 30); reportId = s.id; state.active = null;
       view = 'report'; persist(); render();
     }
+    accounts?.flush();
   }
   function reportSession() { return state.history.find(s => s.id === reportId); }
   function reportView() {
@@ -1453,7 +1460,7 @@ details[open] summary { margin-bottom: 13px; }
       <div class="section-heading"><h2>共 ${filtered.length} 道题目</h2><small>按岗位与题型自由筛选</small></div>${filtered.length ? `<div class="library-grid">${filtered.map(q => `<article class="panel library-card"><div class="question-meta" style="margin:0"><span class="badge">${esc(q.category)}</span><span class="badge orange">${esc(q.difficulty)}</span></div><h3>${esc(q.title)}</h3><p>${esc(q.prompt)}</p><div class="action-row"><button class="link-button" data-action="favorite" data-id="${q.id}" aria-pressed="${state.favorites.includes(q.id)}">${icon('star', 15)}${state.favorites.includes(q.id) ? '已收藏' : '收藏'}</button><div class="action-group"><button class="link-button" data-action="preview-question" data-id="${q.id}">查看思路</button><button class="button secondary small" data-action="practice-one" data-id="${q.id}">练这一题 ${icon('arrow', 13)}</button></div></div></article>`).join('')}</div>` : `<section class="panel empty">${icon(favorites ? 'star' : 'book', 35)}<h3>${favorites && !state.favorites.length ? '你的收藏夹，还在等待第一道题。' : '暂时没有匹配的题目。'}</h3><p>${favorites && !state.favorites.length ? '在题库或练习中点击“收藏”，就能在这里找到它。' : '试试其他关键词，或者切换到全部岗位。'}</p><button class="button secondary" data-action="${favorites && !state.favorites.length ? 'navigate' : 'reset-filters'}" data-view="library">${favorites && !state.favorites.length ? '去题库看看' : '清除筛选'}</button></section>`}`;
   }
   function historyView() {
-    return `<div class="page-head"><div><div class="eyebrow">EVERY PRACTICE COUNTS</div><h1 class="page-title">把进步，留在这里。</h1><p class="page-subtitle">保留最近 30 场已完成面试 · 浏览器更换或清理数据后不会同步</p></div>${state.history.length ? `<button class="link-button" data-action="clear-history">${icon('trash', 15)}清空记录</button>` : ''}</div>
+    return `<div class="page-head"><div><div class="eyebrow">EVERY PRACTICE COUNTS</div><h1 class="page-title">把进步，留在这里。</h1><p class="page-subtitle">保留最近 30 场已完成面试 · ${accounts ? '云端保存成功后，可在其他设备登录查看' : '浏览器更换或清理数据后不会同步'}</p></div>${state.history.length ? `<button class="link-button" data-action="clear-history">${icon('trash', 15)}清空记录</button>` : ''}</div>
       ${state.history.length ? state.history.map(s => { const summary = engine.summarize(s, questions); return `<article class="panel history-row"><span class="role-icon" style="margin:0">${icon(roleIcons[s.role], 22)}</span><div class="history-info"><h3>${esc(roleName(s.role))} <span class="badge">${s.mode === 'practice' ? '练习' : '模拟'}</span></h3><small>${date(s.finishedAt)} · ${summary.answered}/${summary.total} 题已回答 · ${summary.reviewed} 题已自评</small></div><button class="button secondary small" data-action="open-report" data-id="${s.id}">查看复盘 ${icon('arrow', 14)}</button></article>`; }).join('') : `<section class="panel empty">${icon('clock', 38)}<h3>第一场练习，从今天开始。</h3><p>完成一场面试后，回答和复盘会自动保存在这里。</p><button class="button" data-action="navigate" data-view="home">开始第一场练习 ${icon('arrow', 16)}</button></section>`}`;
   }
   function render({ keepScroll = false, focusSearch = false } = {}) {
@@ -1540,7 +1547,7 @@ details[open] summary { margin-bottom: 13px; }
     else if (action === 'select-count') { state.settings.count = Number(button.dataset.count); persist(); render({ keepScroll: true }); }
     else if (action === 'start') startSession();
     else if (action === 'resume') { view = 'interview'; paused = false; timerStamp = Date.now(); render(); }
-    else if (action === 'save-exit') { navigate('home'); toast('已保存，下次可以接着练。'); }
+    else if (action === 'save-exit') { navigate('home'); accounts?.flush(); toast(accounts ? '草稿已保留，云端同步状态见页面顶部。' : '已保存，下次可以接着练。'); }
     else if (action === 'pause') { saveDraft(); tick(); paused = !paused; timerStamp = Date.now(); persist(); render({ keepScroll: true }); }
     else if (action === 'submit-answer') submitAnswer();
     else if (action === 'skip') { saveDraft(); const a = answerFor(state.active, state.active.questionIds[state.active.current]); if (a.text.trim()) confirmDialog('跳过这一题？', '已写的草稿会保留，但本题将标记为跳过，不计入已回答题数。', '跳过此题', () => submitAnswer(true)); else submitAnswer(true); }
@@ -1557,9 +1564,9 @@ details[open] summary { margin-bottom: 13px; }
     else if (action === 'close-modal') closeModal();
     else if (action === 'confirm') { const callback = modal.confirm; closeModal(); callback(); }
     else if (action === 'modal-practice') { closeModal(); startSession([id]); }
-    else if (action === 'save-review') { const a = answerFor(reportSession(), id); if (!a.skipped) { a.checked = [...modal.checks]; a.reviewed = true; } closeModal(); persist(); render({ keepScroll: true }); toast('复盘已保存。'); }
+    else if (action === 'save-review') { const a = answerFor(reportSession(), id); if (!a.skipped) { a.checked = [...modal.checks]; a.reviewed = true; } closeModal(); persist(); accounts?.flush(); render({ keepScroll: true }); toast(accounts ? '复盘已保留，正在同步到云端。' : '复盘已保存。'); }
     else if (action === 'reset-filters') { library = { search: '', role: 'all', stage: 'all' }; render(); }
-    else if (action === 'clear-history') confirmDialog('清空所有已完成的练习记录？', '此操作只清除本浏览器的历史面试。需要保留的回答，请先打开对应复盘并导出。', '清空记录', () => { state.history = []; persist(); render(); toast('练习记录已清空。'); });
+    else if (action === 'clear-history') confirmDialog('清空所有已完成的练习记录？', accounts ? '此操作会同步清除该账号的历史面试。需要保留的回答，请先打开对应复盘并导出。' : '此操作只清除本浏览器的历史面试。需要保留的回答，请先打开对应复盘并导出。', '清空记录', () => { state.history = []; persist(); accounts?.flush(); render(); toast('练习记录已清空。'); });
   });
   document.addEventListener('input', event => {
     if (syncFromStorage()) { toast('已同步另一页面的最新进度，请继续作答。'); return; }
@@ -1586,7 +1593,13 @@ details[open] summary { margin-bottom: 13px; }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     }
   });
-  render();
+  if (accounts) accounts.start({
+    defaultState: () => readState(null),
+    capture: () => { saveDraft(); persist(); },
+    onLock: () => { stopSpeech(); if (modal) closeModal(); state = readState(null); view = 'home'; paused = true; app.replaceChildren(); },
+    onState: next => { stopSpeech(); if (modal) closeModal(); state = readState(JSON.stringify(next)); view = 'home'; reportId = null; paused = false; timerStamp = Date.now(); render(); }
+  });
+  else render();
 })();
 
 </script>

@@ -6,7 +6,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const site = path.join(root, 'site');
 await mkdir(path.join(site, 'src'), { recursive: true });
 await copyFile(path.join(root, 'index.html'), path.join(site, 'index.html'));
-for (const name of ['styles.css', 'questions.js', 'engine.js', 'app.js', 'visits.js']) {
+for (const name of ['styles.css', 'questions.js', 'engine.js', 'app.js', 'visits.js', 'account.css', 'account-config.js', 'accounts.js']) {
   await copyFile(path.join(root, 'src', name), path.join(site, 'src', name));
 }
 let endpoint = process.env.VISIT_ENDPOINT || '';

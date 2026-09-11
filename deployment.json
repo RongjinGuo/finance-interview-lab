@@ -1,6 +1,14 @@
 {
-  "websiteUrl": "https://rongjinguo.github.io/finance-interview-lab/",
+  "websiteUrl": "https://rongjin03-finance-interview-lab.hf.space/",
+  "legacyWebsiteUrl": "https://rongjinguo.github.io/finance-interview-lab/",
   "repositoryUrl": "https://github.com/RongjinGuo/finance-interview-lab",
+  "accountAdminUrl": "https://rongjin03-finance-interview-lab.hf.space/",
+  "spaceUrl": "https://huggingface.co/spaces/Rongjin03/finance-interview-lab",
+  "recordsRepositoryUrl": "https://github.com/RongjinGuo/finance-interview-records",
+  "accountBackendStatus": "deployed-and-verified",
+  "spaceCommit": "a97a5295e4ddcb547f6c357d697bd88a25e6856d",
+  "accountVerifiedAt": "2026-09-11",
+  "phoneAccessStatus": "pending-user-verification",
   "adminUrl": "https://finance-interview-visits.finance-interview-lab.workers.dev/",
   "visitEndpoint": "https://finance-interview-visits.finance-interview-lab.workers.dev/api/visit",
   "backendStatus": "deployed"

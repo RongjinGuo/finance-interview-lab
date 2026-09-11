@@ -4,7 +4,8 @@ import path from 'node:path';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 let html = await readFile(path.join(root, 'index.html'), 'utf8');
-html = html.replace(/\s*<script src="src\/(?:visit-config|visits)\.js"><\/script>/g, '');
+html = html.replace(/\s*<script src="src\/(?:visit-config|visits|account-config|accounts)\.js"><\/script>/g, '');
+html = html.replace(/\s*<link rel="stylesheet" href="src\/account\.css">/g, '');
 const css = await readFile(path.join(root, 'src/styles.css'), 'utf8');
 html = html.replace('<link rel="stylesheet" href="src/styles.css">', () => `<style>\n${css}\n</style>`);
 for (const name of ['questions', 'engine', 'app']) {
