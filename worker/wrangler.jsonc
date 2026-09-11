@@ -1,0 +1,25 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "finance-interview-visits",
+  "main": "index.mjs",
+  "compatibility_date": "2026-09-11",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "vars": {
+    "ALLOWED_ORIGIN": "https://rongjinguo.github.io",
+    "SITE_PATH_PREFIX": "/finance-interview-lab/",
+    "RETENTION_DAYS": "90"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "finance-interview-visits-db",
+      "migrations_dir": "./migrations"
+    }
+  ],
+  "triggers": { "crons": ["17 19 * * *"] }
+}

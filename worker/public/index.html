@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="light">
+  <title>访问记录 · 财务面试练习室</title>
+  <link rel="stylesheet" href="/shared.css">
+  <link rel="stylesheet" href="/admin.css">
+  <script src="/admin.js" defer></script>
+</head>
+<body class="admin-page">
+  <header class="admin-topbar">
+    <a class="admin-brand" href="/" aria-label="财务面试练习室访问后台">
+      <span class="brand-mark" aria-hidden="true">财</span>
+      <span>财务面试练习室<small>访问后台</small></span>
+    </a>
+    <a class="public-link" href="https://rongjinguo.github.io/finance-interview-lab/" target="_blank" rel="noopener noreferrer">打开面试网页 <span aria-hidden="true">↗</span></a>
+  </header>
+
+  <main class="admin-main">
+    <p id="session-check" class="session-check" role="status">正在检查登录状态…</p>
+
+    <section id="login-section" class="login-section" aria-labelledby="login-title" hidden>
+      <div class="login-intro">
+        <p class="eyebrow">VISITOR JOURNAL</p>
+        <h1 id="login-title">每一次访问，<br>都有迹可循。</h1>
+        <p class="login-description">登录管理后台，查看面试网页的<br>访问 IP、来源地区与访问时间。</p>
+        <div class="login-decoration" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+      </div>
+      <div class="panel login-panel">
+        <span class="login-index" aria-hidden="true">01 / 管理员入口</span>
+        <h2>查看访问记录</h2>
+        <p class="muted">使用管理员密码登录。</p>
+        <form id="login-form">
+          <label for="admin-password">管理员密码</label>
+          <input id="admin-password" name="password" type="password" autocomplete="current-password" required maxlength="512" aria-describedby="login-error">
+          <p id="login-error" class="admin-error" data-testid="login-error" role="alert" hidden></p>
+          <button id="login-submit" class="button" type="submit">登录后台 <span aria-hidden="true">→</span></button>
+        </form>
+        <p class="login-footnote">仅供网站管理员使用</p>
+      </div>
+    </section>
+
+    <section id="dashboard" aria-labelledby="dashboard-title" hidden>
+      <div class="dashboard-heading">
+        <div>
+          <p class="eyebrow">VISITOR JOURNAL</p>
+          <h1 id="dashboard-title" tabindex="-1">访问记录<span class="title-dot" aria-hidden="true">.</span></h1>
+          <p class="dashboard-description">看看访问从哪里来。IP 地理位置为大致定位，时间统一显示为北京时间。</p>
+        </div>
+        <div class="dashboard-actions">
+          <button id="refresh-visits" class="button secondary" type="button">刷新记录</button>
+          <button id="logout" class="link-button" type="button">退出登录</button>
+        </div>
+      </div>
+
+      <div id="dashboard-error" class="admin-error dashboard-error" data-testid="dashboard-error" role="alert" hidden></div>
+      <div id="dashboard-status" class="visually-hidden" role="status" aria-live="polite"></div>
+
+      <div class="overview-grid">
+        <div class="summary-grid" aria-label="当前筛选范围统计">
+          <article class="summary-card"><p>访问次数</p><strong data-testid="summary-visits">—</strong><small>页面加载次数</small></article>
+          <article class="summary-card"><p>独立 IP</p><strong data-testid="summary-unique-ips">—</strong><small>按 IP 去重，不等同于人数</small></article>
+          <article class="summary-card"><p>今日访问</p><strong data-testid="summary-today">—</strong><small>当前筛选内的今日访问次数</small></article>
+        </div>
+        <aside class="region-panel" aria-labelledby="regions-title">
+          <div class="region-heading"><h2 id="regions-title">主要来源地区</h2><span>访问次数</span></div>
+          <ol id="top-regions" class="top-regions"><li class="region-empty">暂无地区数据</li></ol>
+        </aside>
+      </div>
+
+      <section class="panel records-panel" aria-labelledby="records-title">
+        <div class="records-heading">
+          <div><h2 id="records-title">访问明细</h2><p id="retention-note">统计随筛选条件更新。</p></div>
+          <button id="export-visits" class="button secondary small" type="button">导出 CSV</button>
+        </div>
+        <form id="filters-form" class="admin-filters">
+          <div class="search-field"><label for="filter-q">IP 或地区</label><input id="filter-q" name="q" type="search" placeholder="搜索 IP、国家、地区或城市" maxlength="200"></div>
+          <div><label for="filter-from">开始日期</label><input id="filter-from" name="from" type="date" aria-describedby="date-help"></div>
+          <div><label for="filter-to">结束日期</label><input id="filter-to" name="to" type="date" aria-describedby="date-help"></div>
+          <div class="filter-actions"><button id="apply-filters" class="button" type="submit">筛选</button><button id="reset-filters" class="link-button" type="button">重置</button></div>
+        </form>
+        <p id="date-help" class="filter-help">日期包含起止当天，按北京时间计算。</p>
+        <div id="records-region" class="table-wrap" tabindex="0" role="region" aria-label="访问明细表格，可横向滚动" aria-busy="false">
+          <table class="visits-table">
+            <caption class="visually-hidden">访问时间、IP 地址、大致地区、浏览器与系统、访问页面</caption>
+            <thead><tr><th scope="col">访问时间 <small>北京时间</small></th><th scope="col">IP 地址</th><th scope="col">大致地区</th><th scope="col">浏览器 / 系统</th><th scope="col">访问页面</th></tr></thead>
+            <tbody id="visits-body"></tbody>
+          </table>
+        </div>
+        <div id="records-empty" class="records-empty" role="status" hidden><span aria-hidden="true">∅</span><h3>暂无访问记录</h3><p>网站有新访问后，点击“刷新记录”即可查看。</p></div>
+        <div class="records-footer"><p id="records-count">正在加载…</p><nav class="pagination" aria-label="访问记录分页"><button id="previous-page" class="button secondary small" type="button" disabled>上一页</button><span id="page-label" aria-live="polite">第 1 / 1 页</span><button id="next-page" class="button secondary small" type="button" disabled>下一页</button></nav></div>
+      </section>
+
+      <footer class="admin-footer"><p>同一个 IP 可能由多人共用，也可能随网络变化。本机与内网访问会单独标明。</p><span id="last-updated">尚未更新</span></footer>
+    </section>
+    <noscript><p class="admin-error">请启用 JavaScript 后使用访问后台。</p></noscript>
+  </main>
+</body>
+</html>
