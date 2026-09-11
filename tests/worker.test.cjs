@@ -297,3 +297,57 @@ test('assets and unknown API requests create no visits and receive security head
   for (const route of ['/api/admin/not-found', '/api/not-found', '/.env', '/wrangler.jsonc', '/migrations/0001_visitors.sql']) assert.equal((await f.request(route)).status, 404, route);
   assert.equal(f.sqlite.prepare('SELECT COUNT(*) AS n FROM visits').get().n, 0);
 });
+
+test('production HTTP pages redirect to the same HTTPS URL before fetching assets', async t => {
+  let assetRequests = 0;
+  const f = fixture(t, { ASSETS: { fetch: async () => { assetRequests++; return new Response('admin page'); } } });
+  const response = await f.request('/?view=visits%20today', { urlOrigin: 'http://admin.example.workers.dev' });
+  assert.equal(response.status, 308);
+  assert.equal(response.headers.get('location'), `${origin}/?view=visits%20today`);
+  assert.equal(response.headers.get('strict-transport-security'), null);
+  assert.equal(assetRequests, 0);
+});
+
+test('production HTTP login redirects before checking credentials or creating a session', async t => {
+  const f = fixture(t);
+  const httpOrigin = 'http://admin.example.workers.dev';
+  const response = await f.request('/api/admin/login', { urlOrigin: httpOrigin, method: 'POST', body: { password }, headers: { Origin: httpOrigin } });
+  assert.equal(response.status, 308);
+  assert.equal(response.headers.get('location'), `${origin}/api/admin/login`);
+  assert.equal(response.headers.get('set-cookie'), null);
+  assert.equal(f.sqlite.prepare('SELECT COUNT(*) AS n FROM admin_sessions').get().n, 0);
+  assert.equal(f.sqlite.prepare('SELECT COUNT(*) AS n FROM login_attempts').get().n, 0);
+  const malformed = await f.request('/api/admin/login', { urlOrigin: httpOrigin, method: 'POST', body: '{invalid' });
+  assert.equal(malformed.status, 308);
+});
+
+test('HTTP login remains available only for explicit local development loopback hosts', async t => {
+  const f = fixture(t, { LOCAL_DEV: 'true' });
+  for (const hostname of ['localhost', '127.0.0.1', '[::1]']) {
+    const localOrigin = `http://${hostname}:8787`;
+    assert.equal((await f.request('/', { urlOrigin: localOrigin })).status, 200);
+    const login = await f.request('/api/admin/login', { urlOrigin: localOrigin, method: 'POST', body: { password }, headers: { Origin: localOrigin } });
+    assert.equal(login.status, 200, hostname);
+    assert.equal(login.headers.get('strict-transport-security'), null);
+    assert.ok(!login.headers.get('set-cookie').includes('; Secure'));
+  }
+  for (const hostname of ['admin.example.workers.dev', 'localhost.evil.example', '192.168.1.1']) {
+    assert.equal((await f.request('/', { urlOrigin: `http://${hostname}` })).status, 308, hostname);
+  }
+  const production = fixture(t);
+  assert.equal((await production.request('/', { urlOrigin: 'http://localhost:8787' })).status, 308);
+});
+
+test('HTTPS pages, APIs, and error responses include HSTS', async t => {
+  const f = fixture(t);
+  for (const route of ['/', '/admin.js', '/api/admin/session', '/api/unknown']) {
+    const response = await f.request(route);
+    assert.equal(response.headers.get('strict-transport-security'), 'max-age=31536000', route);
+  }
+  assert.equal((await f.visit()).headers.get('strict-transport-security'), 'max-age=31536000');
+});
+
+test('Worker executes before every asset so HTTP admin pages cannot bypass HTTPS enforcement', () => {
+  const config = JSON.parse(readFileSync(path.join(__dirname, '../worker/wrangler.jsonc'), 'utf8'));
+  assert.equal(config.assets.run_worker_first, true);
+});

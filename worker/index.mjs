@@ -276,18 +276,27 @@ async function route(request, env) {
 
 export default {
   async fetch(request, env) {
+    const url = new URL(request.url);
+    const localDevelopment = String(env.LOCAL_DEV) === 'true' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
     let response;
-    try { response = await route(request, env); }
+    try {
+      if (url.protocol === 'http:' && !localDevelopment) {
+        const secureUrl = new URL(url);
+        secureUrl.protocol = 'https:';
+        response = new Response(null, { status: 308, headers: { Location: secureUrl.href, 'Cache-Control': 'no-store' } });
+      } else response = await route(request, env);
+    }
     catch (error) {
       response = error instanceof HttpError ? json({ error: error.message }, error.status, error.headers) : json({ error: '服务暂时不可用，请稍后重试。' }, 500);
-      if (new URL(request.url).pathname === '/api/visit' && request.headers.get('Origin') === env.ALLOWED_ORIGIN) {
+      if (url.pathname === '/api/visit' && request.headers.get('Origin') === env.ALLOWED_ORIGIN) {
         response.headers.set('Access-Control-Allow-Origin', env.ALLOWED_ORIGIN);
         response.headers.set('Vary', 'Origin');
       }
     }
     const headers = new Headers(response.headers);
     for (const [key, value] of Object.entries(SECURITY_HEADERS)) headers.set(key, value);
-    if (new URL(request.url).pathname !== '/api/visit') headers.set('Cache-Control', 'no-store');
+    if (url.protocol === 'https:') headers.set('Strict-Transport-Security', 'max-age=31536000');
+    if (url.pathname !== '/api/visit') headers.set('Cache-Control', 'no-store');
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
   },
   async scheduled(_event, env) { await cleanup(env, true); }
